@@ -22,18 +22,20 @@ ls -la ${SYSCTL_NATCONF} > /dev/null 2>&1
 # Setting ip forward
 if [ "$?" != 0 ]; then
   echo "Create ${SYSCTL_NATCONF}"
+  echo 1 > /proc/sys/net/ipv4/ip_forward
+  echo 0 > /proc/sys/net/ipv4/conf/eth0/send_redirects
   echo 'net.ipv4.ip_forward = 1' >> ${SYSCTL_NATCONF}
   echo 'net.ipv4.conf.eth0.send_redirects = 0' >> ${SYSCTL_NATCONF}
-  sysctl -p
 fi
 
 # Check iptables for NAT exist
-iptables -t nat -L -n | grep 'MASQUERADE  all  --  0.0.0.0/0            0.0.0.0/0' > /dev/null 2>&1
+/sbin/iptables -t nat -L -n | grep 'MASQUERADE  all  --  0.0.0.0/0            0.0.0.0/0' > /dev/null 2>&1
 
 # Setting iptables for NAT
 if [ "$?" != 0 ]; then
-  iptables -t nat -A POSTROUTING -o eth0 -s 0.0.0.0/0 -j MASQUERADE
-  iptables-save > /etc/sysconfig/iptables
+  
+  /sbin/iptables -t nat -A POSTROUTING -o eth0 -s 0.0.0.0/0 -j MASQUERADE
+  /sbin/iptables-save > /etc/sysconfig/iptables
 fi
 
 # Setting AWS Configure
