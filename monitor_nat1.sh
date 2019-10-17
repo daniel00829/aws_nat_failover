@@ -2,14 +2,15 @@
 
 LOGFILE="/tmp/monitor_nat.log"
 Instance_ID="`curl -s http://169.254.169.254/latest/meta-data/instance-id`"
+Instance_Name="NAT1"
 
 # Get NAT1 Information
-NAT_MASTER_ID="`aws ec2 describe-instances --filters 'Name=tag:Name,Values=Lab NAT1' --query "Reservations[*].Instances[*].{Instance:InstanceId}"  --output text`"
-NAT_MASTER_PRIVATE_IP="`aws ec2 describe-instances --filters 'Name=tag:Name,Values=Lab NAT1' --query "Reservations[*].Instances[*].{PrivateIP:PrivateIpAddress}"  --output text`"
+NAT_MASTER_ID="`aws ec2 describe-instances --filters "Name=tag:Name,Values=${Instance_Name}" --query "Reservations[*].Instances[*].{Instance:InstanceId}"  --output text`"
+NAT_MASTER_PRIVATE_IP="`aws ec2 describe-instances --filters "Name=tag:Name,Values=${Instance_Name}" --query "Reservations[*].Instances[*].{PrivateIP:PrivateIpAddress}"  --output text`"
 
 # Get Private Route Table ID
 Route_Table_ID="`aws ec2 describe-route-tables \
-  --filters "Name=tag:Name,Values=Private Route" \
+  --filters "Name=tag:Name,Values=private" \
   --query "RouteTables[*].{RouteTables:RouteTableId}" \
   --output text`"
 
@@ -31,6 +32,8 @@ Ping_Timeout=1
 Wait_Between_Pings=2
 Wait_for_Instance_Stop=60
 Wait_for_Instance_Start=300
+
+echo "`date "+%F %H:%M:%S"`-- Starting NAT monitor" >> ${LOGFILE}
 
 while [ . ]; do
   # Check health of other NAT instance

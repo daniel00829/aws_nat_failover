@@ -2,14 +2,15 @@
 
 LOGFILE="/tmp/monitor_nat.log"
 Instance_ID="`curl -s http://169.254.169.254/latest/meta-data/instance-id`"
+Instance_Name="NAT2"
 
 # Get NAT1 Information
-NAT_BACKUP_ID="`aws ec2 describe-instances --filters 'Name=tag:Name,Values=Lab NAT2' --query "Reservations[*].Instances[*].{Instance:InstanceId}"  --output text`"
-NAT_BACKUP_PRIVATE_IP="`aws ec2 describe-instances --filters 'Name=tag:Name,Values=Lab NAT2' --query "Reservations[*].Instances[*].{PrivateIP:PrivateIpAddress}"  --output text`"
+NAT_MASTER_ID="`aws ec2 describe-instances --filters "Name=tag:Name,Values=${Instance_Name}" --query "Reservations[*].Instances[*].{Instance:InstanceId}"  --output text`"
+NAT_MASTER_PRIVATE_IP="`aws ec2 describe-instances --filters "Name=tag:Name,Values=${Instance_Name}" --query "Reservations[*].Instances[*].{PrivateIP:PrivateIpAddress}"  --output text`"
 
 # Get Private Route Table ID
 Route_Table_ID="`aws ec2 describe-route-tables \
-  --filters "Name=tag:Name,Values=Private Route" \
+  --filters "Name=tag:Name,Values=private" \
   --query "RouteTables[*].{RouteTables:RouteTableId}" \
   --output text`"
 
@@ -32,9 +33,11 @@ Wait_Between_Pings=2
 Wait_for_Instance_Stop=60
 Wait_for_Instance_Start=300
 
+echo "`date "+%F %H:%M:%S"`-- Starting NAT monitor" >> ${LOGFILE}
+
 while [ . ]; do
   # Check health of other NAT instance
-  pingresult=`ping -c ${Num_Pings} -W ${Ping_Timeout} ${NAT_BACKUP_PRIVATE_IP} | grep time= | wc -l`
+  pingresult=`ping -c ${Num_Pings} -W ${Ping_Timeout} ${NAT_MASTER_PRIVATE_IP} | grep time= | wc -l`
   # Check to see if any of the health checks succeeded, if not
   if [ "${pingresult}" == "0" ]; then
     # Set HEALTHY variables to unhealthy (0)
@@ -44,9 +47,6 @@ while [ . ]; do
     while [ "${NAT_HEALTHY}" == "0" ]; do
       # NAT instance is unhealthy, loop while we try to fix it
       if [ "${ROUTE_HEALTHY}" == "0" ]; then
-        # Disassocite NAT VIP of EC2 Instance
-        echo "`date "+%F %H:%M:%S"` - Disassociate NAT VIP of EC2 Instance" >> ${LOGFILE}
-        aws ec2 disassociate-address --association-id ${NAT_EIP_Association_ID}
         # Associte NAT VIP of EC2 Instance
         echo "`date "+%F %H:%M:%S"` - Associate NAT VIP of EC2 Instance" >> ${LOGFILE}
         aws ec2 associate-address --allocation-id ${NAT_EIP_Allocation_ID} --instance-id ${Instance_ID}
@@ -57,17 +57,17 @@ while [ . ]; do
       fi
 
 
-      NAT_STATE="`aws ec2 describe-instances --instance-ids ${NAT_BACKUP_ID} --query "Reservations[*].Instances[*].State.Name" --output text`"
+      NAT_STATE="`aws ec2 describe-instances --instance-ids ${NAT_MASTER_ID} --query "Reservations[*].Instances[*].State.Name" --output text`"
 
       if [ "${NAT_STATE}" == "stopped" ]; then
     	echo "`date "+%F %H:%M:%S"` -- Other NAT instance stopped, starting it back up" >> ${LOGFILE}
-        aws ec2 start-instances --instance-ids ${NAT_BACKUP_ID}
+        aws ec2 start-instances --instance-ids ${NAT_MASTER_ID}
 	NAT_HEALTHY=1
         sleep $Wait_for_Instance_Start
       else
 	if [ "$STOPPING_NAT" == "0" ]; then
     	  echo "`date "+%F %H:%M:%S"` -- Other NAT instance ${NAT_STATE}, attempting to stop for reboot" >> ${LOGFILE}
-    aws ec2 stop-instances --instance-ids ${NAT_BACKUP_ID}
+    aws ec2 stop-instances --instance-ids ${NAT_MASTER_ID}
 	  STOPPING_NAT=1
 	fi
         sleep $Wait_for_Instance_Stop
