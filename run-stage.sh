@@ -4,6 +4,40 @@ exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
 export PATH=$PATH
 export AWS_DEFAULT_REGION="`curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone | sed 's/[[:lower:]]$//g'`"
 
+SYSCTL_DIR="/etc/sysctl.d"
+SYSCTL_NATCONF="/etc/sysctl.d/nat.conf"
+
+# Check /etc/sysctl.d exist
+ls -ld ${DIR} > /dev/null 2>&1
+
+# Create /etc/sysctl.d
+if [ "$?" != 0 ]; then
+  echo "Create Directory - ${DIR}"
+  mkdir -p /etc/sysctl.d
+fi
+
+# Check /etc/sysctl.d/nat.conf exist
+ls -la ${SYSCTL_NATCONF} > /dev/null 2>&1
+
+# Setting ip forward
+if [ "$?" != 0 ]; then
+  echo "Create ${SYSCTL_NATCONF}"
+  echo 1 > /proc/sys/net/ipv4/ip_forward
+  echo 0 > /proc/sys/net/ipv4/conf/eth0/send_redirects
+  echo 'net.ipv4.ip_forward = 1' >> ${SYSCTL_NATCONF}
+  echo 'net.ipv4.conf.eth0.send_redirects = 0' >> ${SYSCTL_NATCONF}
+fi
+
+# Check iptables for NAT exist
+/sbin/iptables -t nat -L -n | grep 'MASQUERADE  all  --  0.0.0.0/0            0.0.0.0/0' > /dev/null 2>&1
+
+# Setting iptables for NAT
+if [ "$?" != 0 ]; then
+  
+  /sbin/iptables -t nat -A POSTROUTING -o eth0 -s 0.0.0.0/0 -j MASQUERADE
+  /sbin/iptables-save > /etc/sysconfig/iptables
+fi
+
 # Setting AWS Configure
 if [ -d "$HOME/.aws" ]; then
   echo "`date "+%F %H:%M:%S"` - $HOME/.aws is exists"
